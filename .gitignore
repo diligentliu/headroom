@@ -7,6 +7,9 @@
 # Hundreds of MB each — published to HuggingFace, never committed.
 /onnx/
 
+# Operator-local CC Switch deployment, logs and recovery snapshots.
+/.runtime/
+
 # Private scripts (contain credentials). Allowlist checked-in helpers below.
 scripts/
 !scripts/
