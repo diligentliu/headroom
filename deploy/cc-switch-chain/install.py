@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -74,6 +75,13 @@ def main() -> None:
         dirs_exist_ok=True,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.so", "*.pyd"),
     )
+    # pytest from the checkout imports source/headroom before site-packages.
+    # Expose the same validated native library there, without committing a
+    # machine-specific binary or requiring a full Rust build on the other Mac.
+    for library in target.glob("_core*.so"):
+        source_link = ROOT / "headroom" / library.name
+        if not source_link.exists() and not source_link.is_symlink():
+            source_link.symlink_to(os.path.relpath(library, source_link.parent))
     subprocess.run(
         [
             str(py),
