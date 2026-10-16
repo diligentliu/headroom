@@ -6914,6 +6914,22 @@ class OpenAIHandlerMixin:
            ContentRouter path, then sends the request upstream
         5. Relays all subsequent messages bidirectionally
         """
+        from headroom.providers.codex.endpoints import local_codex_gateway_http_only
+
+        if local_codex_gateway_http_only():
+            from fastapi.responses import JSONResponse
+
+            # CC Switch intentionally returns 426 so Codex falls back to HTTP
+            # Responses. Preserve this BEFORE accepting a ChatGPT-auth socket;
+            # a 101 followed by a close masks fallback as a stream failure.
+            await websocket.send_denial_response(
+                JSONResponse(
+                    status_code=426,
+                    content={"error": {"message": "Use HTTP Responses for the local gateway"}},
+                )
+            )
+            return
+
         try:
             import websockets
         except ImportError:
@@ -7083,7 +7099,7 @@ class OpenAIHandlerMixin:
             # ChatGPT session auth → route to chatgpt.com backend
             upstream_url = codex_responses_websocket_url()
             logger.debug(
-                f"[{request_id}] WS: ChatGPT session auth detected, routing to chatgpt.com"
+                f"[{request_id}] WS: ChatGPT session auth detected, routing to {upstream_url}"
             )
         else:
             # API key auth → route to configured OpenAI API URL
