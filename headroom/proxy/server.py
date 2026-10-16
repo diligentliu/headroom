@@ -3241,6 +3241,27 @@ def create_app(config: ProxyConfig | None = None) -> FastAPI:
             set_upstream=_set_anthropic_upstream,
         )
 
+    from headroom.providers.codex.endpoints import local_codex_gateway
+    from headroom.proxy.codex_cc_switch_reconciler import CodexCCSwitchReconciler
+
+    _codex_gateway = local_codex_gateway()
+    _codex_reconciler: CodexCCSwitchReconciler | None = None
+    if _codex_gateway:
+        from urllib.parse import urlsplit
+
+        if urlsplit(_codex_gateway).port == config.port:
+            raise ValueError("Codex gateway must not use Headroom's listening port")
+        if os.environ.get("HEADROOM_CC_SWITCH_RECONCILE_CODEX", "").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
+            _codex_reconciler = CodexCCSwitchReconciler(
+                proxy_url=f"http://127.0.0.1:{config.port}/v1",
+                gateway_url=_codex_gateway,
+            )
+
     # Single-worker-owner lock. With uvicorn workers > 1, each worker runs the
     # lifespan independently. A file lock elects ONE owner worker so that
     # single-instance background tasks (currently the cc-switch reconciler) run
@@ -3381,6 +3402,8 @@ def create_app(config: ProxyConfig | None = None) -> FastAPI:
                 # so workers could disagree on the upstream.
                 if _cc_reconciler is not None and _beacon_is_owner[0]:
                     await _cc_reconciler.start()
+                if _codex_reconciler is not None and _beacon_is_owner[0]:
+                    await _codex_reconciler.start()
 
                 app.state.ready = True
                 yield
@@ -3445,6 +3468,8 @@ def create_app(config: ProxyConfig | None = None) -> FastAPI:
 
             if _cc_reconciler is not None:
                 await _timed(_cc_reconciler.stop(), label="cc_reconciler.stop", timeout=3.0)
+            if _codex_reconciler is not None:
+                await _timed(_codex_reconciler.stop(), label="codex_reconciler.stop", timeout=3.0)
             if _beacon_is_owner[0]:
                 _release_beacon_lock()
             if proxy.usage_reporter:
@@ -4398,6 +4423,17 @@ def create_app(config: ProxyConfig | None = None) -> FastAPI:
             "anthropic": HeadroomProxy.ANTHROPIC_API_URL,
             "cc_switch_reconcile": _cc_reconciler is not None,
             "captured_upstream": getattr(_cc_reconciler, "current_upstream", None),
+            "codex_gateway": _codex_gateway,
+            "codex_cc_switch_reconcile": _codex_reconciler is not None,
+            "codex_gateway_transport": (
+                "http-sse"
+                if _codex_gateway
+                and os.environ.get("HEADROOM_CODEX_GATEWAY_WEBSOCKETS", "1").lower()
+                in {"0", "false", "off", "no"}
+                else "http+websocket"
+            )
+            if _codex_gateway
+            else None,
         }
 
     @app.get("/debug/tasks", dependencies=[Depends(_require_loopback)])
