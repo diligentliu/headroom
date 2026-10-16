@@ -119,6 +119,7 @@ def test_dashboard_owns_chain_upstreams_and_mode(tmp_path, monkeypatch):
         "ANTHROPIC_TARGET_API_URL", "HEADROOM_CODEX_LOCAL_GATEWAY",
     ))
     assert "--mode" not in mod.command(cfg)
+    assert "HEADROOM_CODEX_LOCAL_GATEWAY" in env["HEADROOM_UI_MANAGED_ENV_KEYS"]
     mod.seed_ui_settings(cfg)
     saved = json.loads(mod.UI_SETTINGS.read_text())
     assert saved == {

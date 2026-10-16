@@ -39,6 +39,13 @@ def test_codex_gateway_is_editable_and_validated(workspace, monkeypatch):
     )
     assert field["value"] == "http://127.0.0.1:15721/v1"
     assert field["env_override"] is False
+    monkeypatch.setenv("HEADROOM_UI_MANAGED_ENV_KEYS", "HEADROOM_CODEX_LOCAL_GATEWAY")
+    monkeypatch.setenv("HEADROOM_CODEX_LOCAL_GATEWAY", "http://127.0.0.1:15721/v1")
+    field = next(
+        item for item in settings_store.to_schema()["fields"]
+        if item["key"] == "codex_local_gateway"
+    )
+    assert field["env_override"] is False
     with pytest.raises(settings_store.SettingsValidationError):
         settings_store.save({"codex_local_gateway": "https://example.com/v1"})
     with pytest.raises(settings_store.SettingsValidationError):

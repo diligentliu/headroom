@@ -121,6 +121,10 @@ def runtime_env(data: dict, *, watching: bool = True, port: int | None = None) -
         {
             "HEADROOM_WORKSPACE_DIR": str(RUNTIME / "workspace"),
             "HEADROOM_SETTINGS_PATH": str(UI_SETTINGS),
+            "HEADROOM_UI_MANAGED_ENV_KEYS": (
+                "HEADROOM_MODE,HEADROOM_BACKEND,OPENAI_TARGET_API_URL,"
+                "ANTHROPIC_TARGET_API_URL,HEADROOM_CODEX_LOCAL_GATEWAY"
+            ),
             "HEADROOM_PORT": str(port or data["port"]),
             "HEADROOM_HOST": "127.0.0.1",
             "HEADROOM_BEACON": "off",

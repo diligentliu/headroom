@@ -1096,6 +1096,11 @@ def to_schema(
     explicit operator exports.
     """
     stored = load()
+    ui_managed_env = {
+        key.strip()
+        for key in os.environ.get("HEADROOM_UI_MANAGED_ENV_KEYS", "").split(",")
+        if key.strip()
+    }
     environment_effective = effective_values(stored)
     runtime = _coerce_runtime_values(runtime_values)
     effective = {**environment_effective, **runtime}
@@ -1118,6 +1123,7 @@ def to_schema(
                 "tier": field.tier,
                 "env_override": bool(os.environ.get(field.env))
                 and field.env not in env_override_exclusions
+                and field.env not in ui_managed_env
                 and _settings_seeded_env.get(field.env) != os.environ.get(field.env),
                 "runtime_override": field.key in runtime
                 and runtime[field.key] != environment_effective[field.key],

@@ -50,3 +50,7 @@ The dashboard-settings revision passed 108 settings, endpoint, Codex gateway,
 deployment and upstream regression tests. It has **not** been activated in the live service;
 the user will perform the manual restart/switch. Private-machine verification
 remains pending on that machine.
+An isolated macOS checkout installed successfully and started on candidate port
+8789. Its `/settings/schema` showed all five migrated fields with their expected
+values and `env_override=false`; the candidate was stopped, while live 8788
+remained running.
