@@ -28,6 +28,23 @@ def _clear_env(monkeypatch):
         monkeypatch.delenv(field.env, raising=False)
 
 
+def test_codex_gateway_is_editable_and_validated(workspace, monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("HEADROOM_PORT", "8788")
+    settings_store.save({"codex_local_gateway": "http://127.0.0.1:15721/v1"})
+    settings_store.apply_to_environ(settings_store.load())
+    field = next(
+        item for item in settings_store.to_schema()["fields"]
+        if item["key"] == "codex_local_gateway"
+    )
+    assert field["value"] == "http://127.0.0.1:15721/v1"
+    assert field["env_override"] is False
+    with pytest.raises(settings_store.SettingsValidationError):
+        settings_store.save({"codex_local_gateway": "https://example.com/v1"})
+    with pytest.raises(settings_store.SettingsValidationError):
+        settings_store.save({"codex_local_gateway": "http://127.0.0.1:8788/v1"})
+
+
 class TestRoundTrip:
     def test_save_then_load_coerces_types(self, workspace, monkeypatch):
         _clear_env(monkeypatch)

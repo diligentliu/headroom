@@ -11,15 +11,11 @@ CHATGPT_BACKEND_WS_URL = "wss://chatgpt.com"
 CODEX_BACKEND_PREFIX = "/backend-api/codex"
 
 
-def local_codex_gateway() -> str | None:
-    """Explicit operator-only Responses gateway; never read from client headers.
-
-    Restrict credential-bearing subscription traffic to a loopback IP literal.
-    Other ChatGPT endpoints (account, catalogue and Live) keep their native route.
-    """
-    value = os.environ.get("HEADROOM_CODEX_LOCAL_GATEWAY", "").strip().rstrip("/")
+def validate_local_codex_gateway(value: str, *, headroom_port: int | None = None) -> str:
+    """Validate the credential-bearing subscription gateway before saving it."""
+    value = value.strip().rstrip("/")
     if not value:
-        return None
+        raise ValueError("Codex gateway URL is required")
     parsed = urlsplit(value)
     try:
         loopback = ipaddress.ip_address(parsed.hostname or "").is_loopback
@@ -37,9 +33,25 @@ def local_codex_gateway() -> str | None:
         or parsed.path != "/v1"
     ):
         raise ValueError("HEADROOM_CODEX_LOCAL_GATEWAY requires http(s)://loopback-ip:port/v1")
-    if str(port) == os.environ.get("HEADROOM_PORT", "").strip():
+    if headroom_port is not None and port == headroom_port:
         raise ValueError("Codex gateway must not point back to Headroom's listening port")
     return value
+
+
+def local_codex_gateway() -> str | None:
+    """Explicit operator-only Responses gateway; never read from client headers.
+
+    Restrict credential-bearing subscription traffic to a loopback IP literal.
+    Other ChatGPT endpoints (account, catalogue and Live) keep their native route.
+    """
+    value = os.environ.get("HEADROOM_CODEX_LOCAL_GATEWAY", "").strip()
+    if not value:
+        return None
+    port_raw = os.environ.get("HEADROOM_PORT", "").strip()
+    return validate_local_codex_gateway(
+        value,
+        headroom_port=int(port_raw) if port_raw.isdecimal() else None,
+    )
 
 
 def local_codex_gateway_http_only() -> bool:

@@ -26,6 +26,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / ".runtime/cc-switch-chain"
 SETTINGS = RUNTIME / "deployment.json"
+UI_SETTINGS = RUNTIME / "workspace/config/settings.json"
 LABEL = "com.headroom.default"
 SERVICE = f"gui/{os.getuid()}/{LABEL}" if hasattr(os, "getuid") else ""
 PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
@@ -105,22 +106,30 @@ def prepare(args) -> None:
 
 def runtime_env(data: dict, *, watching: bool = True, port: int | None = None) -> dict:
     env = os.environ.copy()
+    # These knobs are owned by the dashboard settings file, even when the
+    # operator's shell exports old values during a later deployment.
+    for key in (
+        "HEADROOM_MODE",
+        "HEADROOM_BACKEND",
+        "OPENAI_TARGET_API_URL",
+        "ANTHROPIC_TARGET_API_URL",
+        "HEADROOM_CODEX_LOCAL_GATEWAY",
+    ):
+        env.pop(key, None)
     # Use independent Headroom state; keep the old ledger and settings intact.
     env.update(
         {
             "HEADROOM_WORKSPACE_DIR": str(RUNTIME / "workspace"),
-            "HEADROOM_SETTINGS_PATH": str(RUNTIME / "workspace/config/settings.json"),
+            "HEADROOM_SETTINGS_PATH": str(UI_SETTINGS),
             "HEADROOM_PORT": str(port or data["port"]),
             "HEADROOM_HOST": "127.0.0.1",
-            "HEADROOM_MODE": data["mode"],
             "HEADROOM_BEACON": "off",
             "DO_NOT_TRACK": "1",
             "HEADROOM_TELEMETRY": "on",
             "HEADROOM_KOMPRESS_WARMUP": "0",
-            "HEADROOM_CODEX_LOCAL_GATEWAY": data["gateway"],
-            "HEADROOM_CODEX_GATEWAY_WEBSOCKETS": "1" if data["websockets"] else "0",
-            "OPENAI_TARGET_API_URL": data["gateway"].removesuffix("/v1"),
-            "ANTHROPIC_TARGET_API_URL": data["gateway"].removesuffix("/v1"),
+            # HTTP/SSE remains compatible when a new UI-selected gateway has
+            # no WebSocket support; it also avoids stale transport detection.
+            "HEADROOM_CODEX_GATEWAY_WEBSOCKETS": "0",
             "HEADROOM_CC_SWITCH_RECONCILE": "1" if watching else "0",
             "HEADROOM_CC_SWITCH_RECONCILE_CODEX": "1" if watching else "0",
             "CODEX_HOME": data["codex_home"],
@@ -128,6 +137,24 @@ def runtime_env(data: dict, *, watching: bool = True, port: int | None = None) -
         }
     )
     return env
+
+
+def seed_ui_settings(data: dict) -> None:
+    """Preserve existing UI choices and seed the five former env-owned knobs."""
+    stored = json.loads(UI_SETTINGS.read_text()) if UI_SETTINGS.exists() else {}
+    if not isinstance(stored, dict):
+        raise RuntimeError(f"Invalid dashboard settings: {UI_SETTINGS}")
+    gateway = data["gateway"]
+    defaults = {
+        "mode": data["mode"],
+        "backend": "anthropic",
+        "openai_base_url": gateway.removesuffix("/v1"),
+        "anthropic_base_url": gateway.removesuffix("/v1"),
+        "codex_local_gateway": gateway,
+    }
+    for key, value in defaults.items():
+        stored.setdefault(key, value)
+    write_private(UI_SETTINGS, json.dumps(stored, indent=2) + "\n")
 
 
 def command(data: dict, *, port: int | None = None) -> list[str]:
@@ -140,8 +167,6 @@ def command(data: dict, *, port: int | None = None) -> list[str]:
         "127.0.0.1",
         "--port",
         str(port or data["port"]),
-        "--mode",
-        data["mode"],
     ]
 
 
@@ -195,6 +220,7 @@ def snapshot(data: dict, *, remember: bool = True) -> Path:
         Path(data["codex_home"]) / "config.toml",
         Path(data["claude_dir"]) / "settings.json",
         PLIST,
+        UI_SETTINGS,
     ]
     records = []
     for i, path in enumerate(files):
@@ -251,6 +277,7 @@ def switch(data: dict) -> None:
     directory = snapshot(data)
     print("Recovery snapshot:", directory, flush=True)
     try:
+        seed_ui_settings(data)
         bootout()
         stop_headroom(data["port"])
         env = runtime_env(data)
@@ -358,6 +385,7 @@ def main() -> None:
         emergency_direct(data)
     elif args.action == "foreground":
         # Isolated candidate: no config watcher or active-session credential reads.
+        seed_ui_settings(data)
         env = runtime_env(data, watching=False, port=data["port"] + 1)
         env["CODEX_HOME"] = str(RUNTIME / "candidate-codex")
         env["CLAUDE_CONFIG_DIR"] = str(RUNTIME / "candidate-claude")

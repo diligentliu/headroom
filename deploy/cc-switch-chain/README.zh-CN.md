@@ -44,6 +44,10 @@ python3 deploy/cc-switch-chain/manage.py status
 ```
 
 `prepare` 默认网关 `http://127.0.0.1:15721/v1`、Headroom 端口 8788、cache 模式。
+首次切换时，脚本会把这组值写入隔离的 dashboard `settings.json`：
+`mode`、`backend=anthropic`、OpenAI/Anthropic 上游和 Codex 订阅网关。
+已有页面设置优先保留。服务启动环境不再钉住这五项，启动命令也不再用
+`--mode` 覆盖页面；监听地址与端口仍由部署固定。
 其他电脑必须核对实际端口，可用 `--gateway`、`--port`、`--codex-home`、`--claude-dir` 指定。
 它只发送无凭证的本地 WebSocket 握手，不发模型请求。101 表示支持 WS；426 表示按 HTTP/SSE 兼容模式部署；其他状态应先排查。
 
@@ -78,7 +82,7 @@ python3 deploy/cc-switch-chain/manage.py switch
 
 脚本会：
 
-1. 在私有 `.runtime/cc-switch-chain/backups/时间戳/` 备份当时的 Codex 配置、Claude 配置及旧 LaunchAgent。
+1. 在私有 `.runtime/cc-switch-chain/backups/时间戳/` 备份当时的 Codex 配置、Claude 配置、旧 LaunchAgent 和页面设置。
 2. 停止旧 LaunchAgent 和经过身份检查的旧 Headroom 代理/监督进程。
 3. 把同一个 LaunchAgent 标签改成 fork 的隔离运行环境，仍监听 8788。
 4. 启用 Codex 和 Claude 配置监听，后续 CC Switch 写回网关地址时自动恢复 Headroom 入口。
@@ -87,9 +91,35 @@ python3 deploy/cc-switch-chain/manage.py switch
 旧 `~/.headroom/deploy/default/manifest.json`、旧安装及日志不改写。
 fork 的状态独立保存，所以旧历史节省量不自动合并到新面板。
 
-切换后重新打开两个客户端。先各发一个小请求；在 Headroom `/stats` 和 CC Switch 中对照模型及供应商。
-确认请求都经过后，再用实际工具输出观察压缩；短请求可能不压缩。
-目前交付阶段不使用真实账号自动做这一步，以免中断当前会话或消耗用户额度。
+切换后重新打开两个客户端。先各发一个小请求；在 Headroom 代理日志和 CC Switch 中对照请求、模型及供应商。
+再用实际工具输出观察压缩；短请求可能不压缩。某些流式请求已记录压缩但 `/stats` 汇总没有计入，遇到不一致时以同一请求的压缩日志、上游请求和返回状态核对。
+
+## 页面设置与手动重启
+
+打开 `http://127.0.0.1:8788/dashboard/settings`。Proxy mode、Upstream backend、
+OpenAI/Anthropic base URL 和 Codex subscription gateway 可以保存到页面设置。
+Codex gateway 只接受指向本机其他端口的 `http(s)://127.0.0.1:<端口>/v1`；
+它与普通 OpenAI 上游地址独立，切换 CC Switch 端口时要一起检查。
+页面的保存操作不会热更新正在运行的代理。本自定义 LaunchAgent 不由 Headroom
+`install` 管理，页面的 Apply & Restart 会提示手动重启。**由用户在独立终端执行**：
+
+```bash
+launchctl kickstart -k "gui/$(id -u)/com.headroom.default"
+curl --noproxy '*' http://127.0.0.1:8788/health
+curl --noproxy '*' http://127.0.0.1:8788/admin/upstream
+```
+
+页面改动前可以备份 `HEADROOM_SETTINGS_PATH` 指向的 `settings.json`；若需撤销，
+恢复该文件并由用户手动重启。若整个链路需要退回切换前状态，则运行下面的
+`rollback`。不要在服务运行时覆盖其 `.venv`。
+
+### 升级已在运行的 fork
+
+在**新的并行目录** clone 分支或解压新版交付包，在那里运行 `install.py`、
+`manage.py prepare` 和隔离候选验证。新目录的 `.venv` 与 `.runtime` 必须独立；
+不能对正在服务的旧目录运行安装覆盖。准备就绪后由用户在新目录执行
+`manage.py switch`，它会先备份当前 LaunchAgent，再迁移页面初值并切换服务。
+保留旧目录，直到新链路验收完成。私人电脑也按此流程，先读取该电脑实际端口和路径。
 
 ## 应急恢复（不需要新 Headroom 可用）
 

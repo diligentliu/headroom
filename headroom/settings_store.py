@@ -28,6 +28,7 @@ from typing import Any
 from headroom import paths
 
 logger = logging.getLogger(__name__)
+_settings_seeded_env: dict[str, str] = {}
 
 _MASK = "••••••"  # ●●●●●● for masked secret values
 
@@ -749,6 +750,16 @@ SETTINGS: tuple[SettingField, ...] = (
         tier="advanced",
     ),
     SettingField(
+        "HEADROOM_CODEX_LOCAL_GATEWAY",
+        "codex_local_gateway",
+        "Codex subscription gateway",
+        "Endpoints",
+        "str",
+        default=None,
+        help="Local CC Switch gateway for ChatGPT subscription Responses requests, for example http://127.0.0.1:15721/v1. Requires Apply & Restart.",
+        tier="advanced",
+    ),
+    SettingField(
         "ANTHROPIC_TARGET_API_HEADERS",
         "anthropic_extra_headers",
         "Anthropic extra headers",
@@ -900,6 +911,14 @@ def validate(values: dict[str, Any]) -> dict[str, Any]:
             continue
         try:
             result = _coerce(field, value)
+            if key == "codex_local_gateway" and result is not None:
+                from headroom.providers.codex.endpoints import validate_local_codex_gateway
+
+                port_raw = os.environ.get("HEADROOM_PORT", "").strip()
+                result = validate_local_codex_gateway(
+                    result,
+                    headroom_port=int(port_raw) if port_raw.isdecimal() else None,
+                )
         except (ValueError, TypeError) as exc:
             field_errors[key] = str(exc)
             continue
@@ -1005,7 +1024,10 @@ def apply_to_environ(values: dict[str, Any]) -> None:
         field = _BY_KEY.get(key)
         if field is None or value is None:
             continue
-        os.environ.setdefault(field.env, _serialize(field, value))
+        if field.env not in os.environ:
+            serialized = _serialize(field, value)
+            os.environ[field.env] = serialized
+            _settings_seeded_env[field.env] = serialized
 
 
 def _coerce_runtime_values(runtime_values: dict[str, Any] | None) -> dict[str, Any]:
@@ -1095,7 +1117,8 @@ def to_schema(
                 "maximum": field.maximum,
                 "tier": field.tier,
                 "env_override": bool(os.environ.get(field.env))
-                and field.env not in env_override_exclusions,
+                and field.env not in env_override_exclusions
+                and _settings_seeded_env.get(field.env) != os.environ.get(field.env),
                 "runtime_override": field.key in runtime
                 and runtime[field.key] != environment_effective[field.key],
                 "value": _mask(field, effective.get(field.key)),

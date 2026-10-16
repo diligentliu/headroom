@@ -39,4 +39,14 @@ One upstream Starlette/httpx TestClient deprecation warning was emitted; tests p
   is HTTP-only. Live voice and ordinary ChatGPT Chat are not included.
 - Private-machine and non-macOS deployment remain a separate environment verification.
 
-Do not state that production compression or a zero-downtime switch has been verified.
+After the user manually activated the first fork, a real OAuth Responses request
+traversed Headroom :8788 → CC Switch :15721 and returned HTTP 200. Later live
+Codex requests logged transformed request bodies, successful upstream forwarding
+and HTTP 200. The `/stats` summary did not count those streamed compressions;
+the request log and CC Switch input-token records were used for verification.
+This is not a zero-downtime switch guarantee.
+
+The dashboard-settings revision passed the settings, endpoint, Codex gateway and
+deployment regression tests. It has **not** been activated in the live service;
+the user will perform the manual restart/switch. Private-machine verification
+remains pending on that machine.

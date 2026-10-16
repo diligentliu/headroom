@@ -14,6 +14,7 @@ def module(tmp_path, monkeypatch):
     runtime = tmp_path / "runtime"
     runtime.mkdir()
     monkeypatch.setattr(mod, "RUNTIME", runtime)
+    monkeypatch.setattr(mod, "UI_SETTINGS", runtime / "workspace/config/settings.json")
     monkeypatch.setattr(mod, "PLIST", tmp_path / "old.plist")
     monkeypatch.setattr(mod, "bootout", lambda: None)
     monkeypatch.setattr(mod, "bootin", lambda: None)
@@ -99,3 +100,39 @@ def test_candidate_disables_watchers_and_isolates_state(tmp_path, monkeypatch):
     assert env["HEADROOM_BEACON"] == "off"
     assert str(mod.RUNTIME) in env["HEADROOM_WORKSPACE_DIR"]
     assert env.get("HOME") == os.environ.get("HOME")
+
+
+def test_dashboard_owns_chain_upstreams_and_mode(tmp_path, monkeypatch):
+    mod = module(tmp_path, monkeypatch)
+    cfg = data(tmp_path)
+    for key in (
+        "HEADROOM_MODE",
+        "HEADROOM_BACKEND",
+        "OPENAI_TARGET_API_URL",
+        "ANTHROPIC_TARGET_API_URL",
+        "HEADROOM_CODEX_LOCAL_GATEWAY",
+    ):
+        monkeypatch.setenv(key, "old-export")
+    env = mod.runtime_env(cfg)
+    assert all(key not in env for key in (
+        "HEADROOM_MODE", "HEADROOM_BACKEND", "OPENAI_TARGET_API_URL",
+        "ANTHROPIC_TARGET_API_URL", "HEADROOM_CODEX_LOCAL_GATEWAY",
+    ))
+    assert "--mode" not in mod.command(cfg)
+    mod.seed_ui_settings(cfg)
+    saved = json.loads(mod.UI_SETTINGS.read_text())
+    assert saved == {
+        "mode": cfg["mode"],
+        "backend": "anthropic",
+        "openai_base_url": "http://127.0.0.1:15721",
+        "anthropic_base_url": "http://127.0.0.1:15721",
+        "codex_local_gateway": "http://127.0.0.1:15721/v1",
+    }
+    saved["mode"] = "token"
+    mod.UI_SETTINGS.write_text(json.dumps(saved))
+    backup = mod.snapshot(cfg)
+    mod.seed_ui_settings(cfg)
+    assert json.loads(mod.UI_SETTINGS.read_text())["mode"] == "token"
+    mod.UI_SETTINGS.write_text("{}")
+    mod.restore(backup, restart=False)
+    assert json.loads(mod.UI_SETTINGS.read_text())["mode"] == "token"
