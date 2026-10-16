@@ -1,6 +1,6 @@
 # Validation — 2026-10-16
 
-Base: upstream main `683c9a6120c309e84e4848378dbe3891d064f82e` (after release 0.41.0).
+Base: upstream main `df11f2749862a0090db11f7fca3e7dc42a75b612` (after release 0.41.0).
 Environment: macOS Apple Silicon, CPython 3.13.4, isolated fork `.venv`.
 
 ## Completed
@@ -46,7 +46,7 @@ and HTTP 200. The `/stats` summary did not count those streamed compressions;
 the request log and CC Switch input-token records were used for verification.
 This is not a zero-downtime switch guarantee.
 
-The dashboard-settings revision passed the settings, endpoint, Codex gateway and
-deployment regression tests. It has **not** been activated in the live service;
+The dashboard-settings revision passed 108 settings, endpoint, Codex gateway,
+deployment and upstream regression tests. It has **not** been activated in the live service;
 the user will perform the manual restart/switch. Private-machine verification
 remains pending on that machine.

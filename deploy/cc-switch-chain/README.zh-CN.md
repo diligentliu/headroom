@@ -1,6 +1,6 @@
 # Headroom → CC Switch：Codex、桌面编程会话与 Claude Code
 
-此 fork 基于上游 `683c9a6120c309e84e4848378dbe3891d064f82e`，包含 0.41.0 之后的 main 更新。
+此 fork 基于上游 `df11f2749862a0090db11f7fca3e7dc42a75b612`，包含 0.41.0 之后的 main 更新。
 改造是 Python 代理的可选功能；默认关闭，不更改上游用户原来的路由。
 
 ```text
